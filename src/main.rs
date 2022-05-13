@@ -1,18 +1,22 @@
 #![no_std] // just use core Crate
 #![no_main] // manually define the function entry
 
-use stm32f7xx_hal as hal;
-
 use cortex_m_rt::entry;
 use core::panic::PanicInfo;
-use crate::hal::{pac, prelude::*};
+
+use stm32f7xx_hal::{pac, prelude::*};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! { loop {} }
 
 #[entry]
 fn main() -> ! {
+    let core_perip = cortex_m::peripheral::Peripherals::take().unwrap();
     let dev_perip = pac::Peripherals::take().unwrap();
+
+    let rcc = dev_perip.RCC.constrain();
+    let clocks = rcc.cfgr.sysclk(216.MHz()).freeze(); // lock configurations
+    let mut d = core_perip.SYST.delay(&clocks);
 
     let gpio_b = dev_perip.GPIOB.split();
     let mut led_1 = gpio_b.pb0.into_push_pull_output();
@@ -20,16 +24,16 @@ fn main() -> ! {
     let mut led_3 = gpio_b.pb14.into_push_pull_output();
 
     loop {
-        for _ in 0..10_000 {
-            led_1.set_high();
-            led_2.set_high();
-            led_3.set_high();
-        }
+        led_1.set_high();
+        led_2.set_high();
+        led_3.set_high();
 
-        for _ in 0..10_000 {
-            led_1.set_low();
-            led_2.set_low();
-            led_3.set_low();
-        }
+        d.delay_us(1000_000_u32);
+
+        led_1.set_low();
+        led_2.set_low();
+        led_3.set_low();
+
+        d.delay_us(1000_000_u32);
     }
 }
