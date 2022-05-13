@@ -16,12 +16,11 @@ panic-halt = "0.2.0"
 # Uncomment for the allocator example.
 # alloc-cortex-m = "0.4.0"
 
-# Uncomment for the device example.
-# Update `memory.x`, set target to `thumbv7em-none-eabihf` in `.cargo/config`,
-# and then use `cargo build --examples device` to build it.
-# [dependencies.stm32f3]
-# features = ["stm32f303", "rt"]
-# version = "0.7.1"
+[dependencies.stm32f7xx-hal]
+git = "https://github.com/stm32-rs/stm32f7xx-hal.git"
+branch = "master"
+version = "0.6.0"
+features = ["stm32f767", "rt"]
 
 # this lets you use `cargo fix`!
 [[bin]]
