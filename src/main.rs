@@ -24,16 +24,11 @@ fn main() -> ! {
     let mut led_3 = gpio_b.pb14.into_push_pull_output();
 
     loop {
-        led_1.set_high();
-        led_2.set_high();
-        led_3.set_high();
-
-        d.delay_us(1000_000_u32);
-
-        led_1.set_low();
-        led_2.set_low();
-        led_3.set_low();
-
-        d.delay_us(1000_000_u32);
+        led_1.toggle();
+        d.delay_us(100_000_u32);
+        led_2.toggle();
+        d.delay_us(100_000_u32);
+        led_3.toggle();
+        d.delay_us(100_000_u32);
     }
 }
