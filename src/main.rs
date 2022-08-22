@@ -1,13 +1,18 @@
 #![no_std] // just use core Crate
 #![no_main] // manually define the function entry
 
-use cortex_m_rt::entry;
 use core::panic::PanicInfo;
+use cortex_m_rt::entry;
+// use core::panic::PanicInfo;
+use rtt_target::{rtt_init_print, rprintln};
 
 use stm32f7xx_hal::{pac, prelude::*};
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! { loop {} }
+fn panic(_info: &PanicInfo) -> ! {
+    rprintln!("{}", _info);
+    loop {}
+}
 
 #[entry]
 fn main() -> ! {
@@ -16,12 +21,16 @@ fn main() -> ! {
 
     let rcc = dev_perip.RCC.constrain();
     let clocks = rcc.cfgr.sysclk(216.MHz()).freeze(); // lock configurations
-    let mut d = core_perip.SYST.delay(&clocks);
+    let d = core_perip.SYST.delay(&clocks);
 
     let gpio_b = dev_perip.GPIOB.split();
     let mut led_1 = gpio_b.pb0.into_push_pull_output();
     let mut led_2 = gpio_b.pb7.into_push_pull_output();
     let mut led_3 = gpio_b.pb14.into_push_pull_output();
+
+    rtt_init_print!();
+
+    rprintln!("Ready to blink!");
 
     loop {
         led_1.toggle();
