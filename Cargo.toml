@@ -1,7 +1,7 @@
 [package]
 authors = ["Michael Mugnai <michael.mugnai@gmail.com>"]
 edition = "2018"
-name = "stm32f767-blink"
+name = "timesaver_stm32f767"
 version = "0.1.0"
 
 [dependencies]
@@ -24,9 +24,15 @@ branch = "main"
 version = "0.7.0"
 features = ["stm32f767", "rt"]
 
+[lib]
+name = "lcd1602"
+path = "lcd1602/lib.rs"
+test = false
+bench = false
+
 # this lets you use `cargo fix`!
 [[bin]]
-name = "stm32f767-blink"
+name = "timesaver_stm32f767"
 test = false
 bench = false
 
