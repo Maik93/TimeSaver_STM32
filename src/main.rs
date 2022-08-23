@@ -38,6 +38,7 @@ fn main() -> ! {
     let d7 = gpio_b.pb8.into_push_pull_output();
 
     let mut lcd = LCD1602::new(en, rs, d4, d5, d6, d7, d).unwrap();
+    // lcd.set_display(true, true, false).unwrap();
 
     rtt_init_print!();
 
@@ -50,6 +51,7 @@ fn main() -> ! {
         lcd.delay_ms(1_000u16);
 
         led_2.toggle();
+        lcd.set_cursor(6, 1).unwrap();
         lcd.print("Go!").ok();
         // d.delay_ms(1_000u16);
         lcd.delay_ms(2_000u16);

@@ -2,13 +2,8 @@ use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use stm32f7xx_hal::timer::SysDelay;
 
-use crate::{LCD1602, DelayMs, Error};
+use crate::{LCD1602, DelayMs, Error, TextDirection};
 use crate::lcd1602::PackType::{Command, Data};
-
-pub enum Direction {
-    LeftToRight,
-    RightToLeft,
-}
 
 enum PackType {
     Command,
@@ -45,20 +40,20 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         self.send(Command, 0x20 | config_cmd)?; // function set command
 
         self.set_display(true, false, false)?;
-        self.set_entry_mode(Direction::LeftToRight, false)?;
+        self.set_entry_mode(TextDirection::LeftToRight, false)?;
         self.clear()?;
         Ok(())
     }
 
     /// Configure text direction.
-    pub fn set_entry_mode(&mut self, text_direction: Direction, auto_move_cursor: bool)
+    pub fn set_entry_mode(&mut self, text_direction: TextDirection, shift_increment: bool)
                           -> Result<(), Error<E>> {
         let mut cmd = 0x04; // entry mode set command
         match text_direction {
-            Direction::LeftToRight => cmd |= 0x02,
-            Direction::RightToLeft => cmd |= 0x00,
+            TextDirection::LeftToRight => cmd |= 0x02,
+            TextDirection::RightToLeft => cmd |= 0x00,
         }
-        if auto_move_cursor { cmd |= 0x01; }
+        if shift_increment { cmd |= 0x01; }
         self.send(Command, cmd)?;
         Ok(())
     }
@@ -90,7 +85,17 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         Ok(())
     }
 
-    /// Write a given string. TODO: check if the string fits the LCD!
+    pub fn set_cursor(&mut self, column: u8, row: u8)
+                   -> Result<(), Error<E>> {
+        if column >= 16 || row >= 2 {
+            Err(Error::InvalidCursorPosition)
+        } else {
+            self.send(Command, column + (row << 6) | 0x80)?; // set DDRAM address with coordinates
+            Ok(())
+        }
+    }
+
+    /// Write a given string.
     pub fn print(&mut self, s: &str)
                  -> Result<(), Error<E>> {
         for ch in s.chars() {

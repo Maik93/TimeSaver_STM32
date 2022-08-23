@@ -21,13 +21,15 @@ pub trait DelayMs<UintType> {
     fn delay_ms(&mut self, ms: UintType);
 }
 
+pub enum TextDirection {
+    LeftToRight,
+    RightToLeft,
+}
+
 #[derive(Debug)]
 pub enum Error<GPIO> {
     GPIOError(GPIO),
-    TimerError,
-    InvalidAddr,
-    InvalidCursorPos,
-    UnsupportedBusWidth,
+    InvalidCursorPosition,
 }
 
 /// Implement 'From' for custom the error type defined above.
