@@ -2,11 +2,9 @@ use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use stm32f7xx_hal::timer::SysDelay;
 
-use crate::LCD1602;
-use crate::error::Error;
+use crate::{LCD1602, DelayMs, Error};
 use crate::lcd1602::PackType::{Command, Data};
 
-// #[derive(PartialEq)]
 pub enum Direction {
     LeftToRight,
     RightToLeft,
@@ -33,23 +31,22 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
     /// Initialise the LCD.
     fn init(&mut self)
             -> Result<(), Error<E>> {
+        // make 3 pings to the LCD to initialise communication for 4-bit mode
         self.send(Command, 0x03)?;
-        self.delay_handler.delay_ms(5u8);
+        self.delay_ms(5u8);
         self.send(Command, 0x03)?;
-        self.delay_handler.delay_ms(5u8);
+        self.delay_ms(5u8);
         self.send(Command, 0x03)?;
-        self.delay_handler.delay_ms(5u8);
-        self.send(Command, 0x02)?;
+        self.delay_ms(5u8);
+        self.send(Command, 0x02)?; // 4-bit mode
 
-        let mut config_cmd = 0x00; // 4bit mode
+        let mut config_cmd = 0x00; // 5x8 dots per character
         config_cmd |= 0x08; // 2 lines
-        config_cmd |= 0x00; // 5x8 dots per character
         self.send(Command, 0x20 | config_cmd)?; // function set command
 
         self.set_display(true, false, false)?;
         self.set_entry_mode(Direction::LeftToRight, false)?;
         self.clear()?;
-        // self.home()?;
         Ok(())
     }
 
@@ -81,7 +78,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
     pub fn clear(&mut self)
                  -> Result<(), Error<E>> {
         self.send(Command, 0x01)?;
-        self.delay_handler.delay_ms(2u8); // slowest displays need at least 1.53ms
+        self.delay_ms(2u8); // slowest displays need at least 1.53ms
         Ok(())
     }
 
@@ -89,7 +86,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
     pub fn home(&mut self)
                 -> Result<(), Error<E>> {
         self.send(Command, 0x02)?;
-        self.delay_handler.delay_ms(2u8); // slowest displays need at least 1.53ms
+        self.delay_ms(2u8); // slowest displays need at least 1.53ms
         Ok(())
     }
 
@@ -97,7 +94,6 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
     pub fn print(&mut self, s: &str)
                  -> Result<(), Error<E>> {
         for ch in s.chars() {
-            // self.delay_handler.delay_us(320u16); // per char delay TODO: probably useless
             self.send(Data, ch as u8)?;
         }
         Ok(())
@@ -118,8 +114,6 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
     /// Write 4bits data in D4-D7 pins.
     fn write_bus(&mut self, data: u8)
                  -> Result<(), Error<E>> {
-        // self.en.set_low()?;
-
         match (data & 0x1) > 0 {
             true => self.d4.set_high()?,
             false => self.d4.set_low()?,
@@ -137,16 +131,22 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
             false => self.d7.set_low()?,
         };
 
-        // self.en.set_low()?;
-        // self.delay_handler.delay_us(1u16);
         self.en.set_high()?;
-        self.delay_handler.delay_ms(1u8); // enable pulse must be > 450ns
+        self.delay_ms(1u8); // enable pulse must be > 450ns
         self.en.set_low()?;
-        self.delay_handler.delay_ms(1u8); // commands need > 37us to settle
+        self.delay_ms(1u8); // commands need > 37us to settle
         Ok(())
     }
+}
 
-    pub fn delay_ms(&mut self, ms: u16) -> () {
+impl<EN, RS, D4, D5, D6, D7> DelayMs<u8> for LCD1602<EN, RS, D4, D5, D6, D7> {
+    fn delay_ms(&mut self, ms: u8) -> () {
+        self.delay_handler.delay_ms(ms);
+    }
+}
+
+impl<EN, RS, D4, D5, D6, D7> DelayMs<u16> for LCD1602<EN, RS, D4, D5, D6, D7> {
+    fn delay_ms(&mut self, ms: u16) -> () {
         self.delay_handler.delay_ms(ms);
     }
 }

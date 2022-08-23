@@ -8,7 +8,7 @@ use rtt_target::{rtt_init_print, rprintln};
 
 use stm32f7xx_hal::{pac, prelude::*};
 
-use lcd1602::LCD1602;
+use lcd1602::{LCD1602, DelayMs};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
