@@ -3,7 +3,6 @@
 
 use core::panic::PanicInfo;
 use cortex_m_rt::entry;
-// use core::panic::PanicInfo;
 use rtt_target::{rtt_init_print, rprintln};
 
 use stm32f7xx_hal::{pac, prelude::*};
@@ -44,21 +43,22 @@ fn main() -> ! {
 
     rprintln!("Ready to blink!");
 
-    loop {
-        led_1.toggle();
-        lcd.print("Ready!").ok();
-        // d.delay_ms(500u16);
-        lcd.delay_ms(1_000u16);
+    led_1.toggle();
+    lcd.print("Ready!").unwrap();
+    lcd.delay_ms(1_000u16);
 
+    loop {
         led_2.toggle();
         lcd.set_cursor(6, 1).unwrap();
-        lcd.print("Go!").ok();
-        // d.delay_ms(1_000u16);
-        lcd.delay_ms(2_000u16);
+        lcd.write_custom_char(0).unwrap();
+        lcd.write_custom_char(2).unwrap();
+        lcd.delay_ms(500u16);
 
         led_3.toggle();
-        lcd.clear().ok();
-        // d.delay_ms(500u16);
+        // lcd.clear().ok();
+        lcd.set_cursor(6, 1).unwrap();
+        lcd.write_custom_char(1).unwrap();
+        lcd.write_custom_char(3).unwrap();
         lcd.delay_ms(500u16);
     }
 }

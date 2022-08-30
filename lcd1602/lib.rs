@@ -6,6 +6,7 @@
 use stm32f7xx_hal::timer::SysDelay;
 
 mod lcd1602;
+mod custom_characters;
 
 pub struct LCD1602<EN, RS, D4, D5, D6, D7> {
     en: EN,
@@ -30,9 +31,10 @@ pub enum TextDirection {
 pub enum Error<GPIO> {
     GPIOError(GPIO),
     InvalidCursorPosition,
+    InvalidCGRAMLocation,
 }
 
-/// Implement 'From' for custom the error type defined above.
+/// Implement 'From' for the custom Error type defined above.
 impl<E> From<E> for Error<E> {
     fn from(gpio_err: E) -> Self {
         Self::GPIOError(gpio_err)

@@ -2,6 +2,7 @@ use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use stm32f7xx_hal::timer::SysDelay;
 
+use crate::custom_characters::CharMap;
 use crate::{LCD1602, DelayMs, Error, TextDirection};
 use crate::lcd1602::PackType::{Command, Data};
 
@@ -85,6 +86,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         Ok(())
     }
 
+    /// Move the cursor to a given position.
     pub fn set_cursor(&mut self, column: u8, row: u8)
                    -> Result<(), Error<E>> {
         if column >= 16 || row >= 2 {
@@ -102,6 +104,30 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
             self.send(Data, ch as u8)?;
         }
         Ok(())
+    }
+
+    /// Create a custom character from a given char_map (8 bytes array), storing it at mem_location (allowed [0-7]).
+    pub fn create_custom_char(&mut self, mem_location: u8, char_map: CharMap)
+                              -> Result<(), Error<E>> {
+        if mem_location > 7 {
+            Err(Error::InvalidCGRAMLocation)
+        } else {
+            self.send(Command, 0x40 | (mem_location << 3))?; // set CGRAM address
+            for c in char_map {
+                self.write_bus(c)?;
+            }
+            Ok(())
+        }
+    }
+
+    /// Write a custom character that was previously created.
+    pub fn write_custom_char(&mut self, mem_location: u8)
+                             -> Result<(), Error<E>> {
+        if mem_location > 7 {
+            Err(Error::InvalidCGRAMLocation)
+        } else {
+            self.send(Data, mem_location)
+        }
     }
 
     /// Send desired 8bits, either as command or data, as two 4bits packets through the bus.
