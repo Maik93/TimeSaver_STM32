@@ -3,6 +3,7 @@
 
 use core::panic::PanicInfo;
 use cortex_m_rt::entry;
+use rotary_encoder_embedded::{RotaryEncoder, Direction, Sensitivity};
 use rtt_target::{rtt_init_print, rprintln};
 
 use stm32f7xx_hal::{pac, prelude::*};
@@ -30,12 +31,17 @@ fn main() -> ! {
     let mut led_2 = gpio_b.pb7.into_push_pull_output();
     let mut led_3 = gpio_b.pb14.into_push_pull_output();
 
+    // LCD pins
     let rs = gpio_b.pb4.into_push_pull_output();
     let en = gpio_b.pb3.into_push_pull_output();
     let d4 = gpio_b.pb12.into_push_pull_output();
     let d5 = gpio_b.pb13.into_push_pull_output();
     let d6 = gpio_b.pb15.into_push_pull_output();
     let d7 = gpio_b.pb8.into_push_pull_output();
+
+    // Encoder pins
+    let encoder_dt = gpio_b.pb1.into_pull_up_input(); // TODO: set the right pin number
+    let encoder_clk = gpio_b.pb2.into_pull_up_input(); // TODO: set the right pin number
 
     rtt_init_print!();
 
@@ -44,6 +50,10 @@ fn main() -> ! {
     // lcd.set_display(true, true, false).unwrap();
     lcd.init_custom_chars().unwrap();
 
+    // Encoder setup
+    let mut rotary_encoder = RotaryEncoder::new(encoder_dt, encoder_clk);
+    rotary_encoder.set_sensitivity(Sensitivity::Low);
+
     rprintln!("Ready to blink!");
 
     led_1.toggle();
@@ -51,17 +61,31 @@ fn main() -> ! {
     lcd.delay_ms(1_000u16);
 
     loop {
-        led_2.toggle();
-        lcd.set_cursor(6, 1).unwrap();
-        lcd.write_custom_char(MAN_STANDING).unwrap();
-        lcd.write_custom_char(HEART_BORDER).unwrap();
+        // led_2.toggle();
+        // lcd.set_cursor(6, 1).unwrap();
+        // lcd.write_custom_char(MAN_STANDING).unwrap();
+        // lcd.write_custom_char(HEART_BORDER).unwrap();
         lcd.delay_ms(500u16);
 
-        led_3.toggle();
-        // lcd.clear().ok();
-        lcd.set_cursor(6, 1).unwrap();
-        lcd.write_custom_char(MAN_DANCING).unwrap();
-        lcd.write_custom_char(HEART_FULL).unwrap();
-        lcd.delay_ms(500u16);
+        // led_3.toggle();
+        // // lcd.clear().ok();
+        // lcd.set_cursor(6, 1).unwrap();
+        // lcd.write_custom_char(MAN_DANCING).unwrap();
+        // lcd.write_custom_char(HEART_FULL).unwrap();
+        // lcd.delay_ms(500u16);
+
+        // Update the encoder, which will compute its direction
+        rotary_encoder.update();
+        match rotary_encoder.direction() {
+            Direction::Clockwise => {
+                // Increment some value
+            }
+            Direction::Anticlockwise => {
+                // Decrement some value
+            }
+            Direction::None => {
+                // Do nothing
+            }
+        }
     }
 }
