@@ -6,7 +6,7 @@
 use stm32f7xx_hal::timer::SysDelay;
 
 mod lcd1602;
-mod custom_characters;
+pub mod custom_characters;
 
 pub struct LCD1602<EN, RS, D4, D5, D6, D7> {
     en: EN,

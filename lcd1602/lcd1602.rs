@@ -2,7 +2,7 @@ use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use stm32f7xx_hal::timer::SysDelay;
 
-use crate::custom_characters::CharMap;
+use crate::custom_characters::{CharMap, MAN_STANDING, MAN_DANCING, HEART_BORDER, HEART_FULL, CUSTOM_CHARS_MAPS};
 use crate::{LCD1602, DelayMs, Error, TextDirection};
 use crate::lcd1602::PackType::{Command, Data};
 
@@ -24,7 +24,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         Ok(lcd)
     }
 
-    /// Initialise the LCD.
+    /// Initialise the LCD with default configurations.
     fn init(&mut self)
             -> Result<(), Error<E>> {
         // make 3 pings to the LCD to initialise communication for 4-bit mode
@@ -43,6 +43,15 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         self.set_display(true, false, false)?;
         self.set_entry_mode(TextDirection::LeftToRight, false)?;
         self.clear()?;
+        Ok(())
+    }
+
+    pub fn init_custom_chars(&mut self)
+            -> Result<(), Error<E>> {
+        self.create_custom_char(MAN_STANDING, CUSTOM_CHARS_MAPS[MAN_STANDING as usize])?;
+        self.create_custom_char(MAN_DANCING, CUSTOM_CHARS_MAPS[MAN_DANCING as usize])?;
+        self.create_custom_char(HEART_FULL, CUSTOM_CHARS_MAPS[HEART_FULL as usize])?;
+        self.create_custom_char(HEART_BORDER, CUSTOM_CHARS_MAPS[HEART_BORDER as usize])?;
         Ok(())
     }
 
@@ -114,7 +123,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         } else {
             self.send(Command, 0x40 | (mem_location << 3))?; // set CGRAM address
             for c in char_map {
-                self.write_bus(c)?;
+                self.send(Data, c)?;
             }
             Ok(())
         }

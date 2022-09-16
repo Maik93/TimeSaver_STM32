@@ -8,6 +8,7 @@ use rtt_target::{rtt_init_print, rprintln};
 use stm32f7xx_hal::{pac, prelude::*};
 
 use lcd1602::{LCD1602, DelayMs};
+use lcd1602::custom_characters::{MAN_STANDING, MAN_DANCING, HEART_BORDER, HEART_FULL};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -36,10 +37,12 @@ fn main() -> ! {
     let d6 = gpio_b.pb15.into_push_pull_output();
     let d7 = gpio_b.pb8.into_push_pull_output();
 
+    rtt_init_print!();
+
+    // LCD setup
     let mut lcd = LCD1602::new(en, rs, d4, d5, d6, d7, d).unwrap();
     // lcd.set_display(true, true, false).unwrap();
-
-    rtt_init_print!();
+    lcd.init_custom_chars().unwrap();
 
     rprintln!("Ready to blink!");
 
@@ -50,15 +53,15 @@ fn main() -> ! {
     loop {
         led_2.toggle();
         lcd.set_cursor(6, 1).unwrap();
-        lcd.write_custom_char(0).unwrap();
-        lcd.write_custom_char(2).unwrap();
+        lcd.write_custom_char(MAN_STANDING).unwrap();
+        lcd.write_custom_char(HEART_BORDER).unwrap();
         lcd.delay_ms(500u16);
 
         led_3.toggle();
         // lcd.clear().ok();
         lcd.set_cursor(6, 1).unwrap();
-        lcd.write_custom_char(1).unwrap();
-        lcd.write_custom_char(3).unwrap();
+        lcd.write_custom_char(MAN_DANCING).unwrap();
+        lcd.write_custom_char(HEART_FULL).unwrap();
         lcd.delay_ms(500u16);
     }
 }
