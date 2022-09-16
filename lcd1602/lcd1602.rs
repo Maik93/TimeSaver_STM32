@@ -2,6 +2,7 @@ use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use stm32f7xx_hal::timer::SysDelay;
 
+use crate::custom_characters::{CharMap, MAN_STANDING, MAN_DANCING, HEART_BORDER, HEART_FULL, CUSTOM_CHARS_MAPS};
 use crate::{LCD1602, DelayMs, Error, TextDirection};
 use crate::lcd1602::PackType::{Command, Data};
 
@@ -23,7 +24,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         Ok(lcd)
     }
 
-    /// Initialise the LCD.
+    /// Initialise the LCD with default configurations.
     fn init(&mut self)
             -> Result<(), Error<E>> {
         // make 3 pings to the LCD to initialise communication for 4-bit mode
@@ -42,6 +43,15 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         self.set_display(true, false, false)?;
         self.set_entry_mode(TextDirection::LeftToRight, false)?;
         self.clear()?;
+        Ok(())
+    }
+
+    pub fn init_custom_chars(&mut self)
+            -> Result<(), Error<E>> {
+        self.create_custom_char(MAN_STANDING, CUSTOM_CHARS_MAPS[MAN_STANDING as usize])?;
+        self.create_custom_char(MAN_DANCING, CUSTOM_CHARS_MAPS[MAN_DANCING as usize])?;
+        self.create_custom_char(HEART_FULL, CUSTOM_CHARS_MAPS[HEART_FULL as usize])?;
+        self.create_custom_char(HEART_BORDER, CUSTOM_CHARS_MAPS[HEART_BORDER as usize])?;
         Ok(())
     }
 
@@ -85,6 +95,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
         Ok(())
     }
 
+    /// Move the cursor to a given position.
     pub fn set_cursor(&mut self, column: u8, row: u8)
                    -> Result<(), Error<E>> {
         if column >= 16 || row >= 2 {
@@ -102,6 +113,30 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
             self.send(Data, ch as u8)?;
         }
         Ok(())
+    }
+
+    /// Create a custom character from a given char_map (8 bytes array), storing it at mem_location (allowed [0-7]).
+    pub fn create_custom_char(&mut self, mem_location: u8, char_map: CharMap)
+                              -> Result<(), Error<E>> {
+        if mem_location > 7 {
+            Err(Error::InvalidCGRAMLocation)
+        } else {
+            self.send(Command, 0x40 | (mem_location << 3))?; // set CGRAM address
+            for c in char_map {
+                self.send(Data, c)?;
+            }
+            Ok(())
+        }
+    }
+
+    /// Write a custom character that was previously created.
+    pub fn write_custom_char(&mut self, mem_location: u8)
+                             -> Result<(), Error<E>> {
+        if mem_location > 7 {
+            Err(Error::InvalidCGRAMLocation)
+        } else {
+            self.send(Data, mem_location)
+        }
     }
 
     /// Send desired 8bits, either as command or data, as two 4bits packets through the bus.
