@@ -8,7 +8,7 @@ use alloc::format;
 use alloc_cortex_m::CortexMHeap;
 use core::panic::PanicInfo;
 use cortex_m_rt::entry;
-use rotary_encoder_embedded::{Direction, RotaryEncoder, Sensitivity};
+use rotary_encoder_embedded::{Direction, RotaryEncoder};
 use rtt_target::{rprintln, rtt_init_print};
 
 use stm32f7xx_hal::{pac, prelude::*};
@@ -71,10 +71,10 @@ fn main() -> ! {
     let mut lcd = LCD1602::new(en, rs, d4, d5, d6, d7, d).unwrap();
     // lcd.set_display(true, true, false).unwrap();
     lcd.init_custom_chars().unwrap();
+    let mut lcd_scaler = 0u8;
 
     // Encoder setup
-    let mut rotary_encoder = RotaryEncoder::new(encoder_dt, encoder_clk);
-    rotary_encoder.set_sensitivity(Sensitivity::Low);
+    let mut rotary_encoder = RotaryEncoder::new(encoder_dt, encoder_clk).into_standard_mode();
     let mut encoder_val = 0i16;
 
     rprintln!("Ready!");
@@ -85,14 +85,12 @@ fn main() -> ! {
 
     loop {
         // Update the encoder, which will compute its direction
-        rotary_encoder.update();
+        rotary_encoder.update(); // NOTE: best used when polled at ~900Hz
         match rotary_encoder.direction() {
             Direction::Clockwise => {
-                rprintln!("Increment!");
                 encoder_val += 1;
             }
             Direction::Anticlockwise => {
-                rprintln!("Decrement!");
                 encoder_val -= 1;
             }
             Direction::None => {
@@ -101,22 +99,27 @@ fn main() -> ! {
         }
 
         // Character animation
-        if led_2.is_set_high() {
-            led_2.set_low();
-            lcd.set_cursor(6, 1).unwrap();
-            lcd.write_custom_char(MAN_STANDING).unwrap();
-            // lcd.write_custom_char(HEART_BORDER).unwrap();
-        } else {
-            led_2.set_high();
-            lcd.set_cursor(6, 1).unwrap();
-            lcd.write_custom_char(MAN_DANCING).unwrap();
-            // lcd.write_custom_char(HEART_FULL).unwrap();
+        lcd_scaler += 1;
+        if lcd_scaler % 50 == 0 {
+            if led_2.is_set_high() {
+                led_2.set_low();
+                lcd.set_cursor(15, 1).unwrap();
+                lcd.write_custom_char(MAN_STANDING).unwrap();
+                // lcd.write_custom_char(HEART_BORDER).unwrap();
+            } else {
+                led_2.set_high();
+                lcd.set_cursor(15, 1).unwrap();
+                lcd.write_custom_char(MAN_DANCING).unwrap();
+                // lcd.write_custom_char(HEART_FULL).unwrap();
+            }
+
+            lcd_scaler = 0;
         }
 
         // Update timer printed value
-        lcd.set_cursor(10, 0).unwrap();
-        lcd.print(&format!("{}", encoder_val)).unwrap();
+        lcd.set_cursor(9, 0).unwrap();
+        lcd.print(&format!("{: <3}", encoder_val)).unwrap(); // left-aligned with 3 digits (including sign)
 
-        lcd.delay_ms(500u16);
+        lcd.delay_ms(1u8); // loop at around 1kHz
     }
 }
