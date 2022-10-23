@@ -1,6 +1,11 @@
 #![no_std] // just use core Crate
 #![no_main] // manually define the function entry
+#![feature(alloc_error_handler)]
 
+extern crate alloc;
+
+use alloc::format;
+use alloc_cortex_m::CortexMHeap;
 use core::panic::PanicInfo;
 use cortex_m_rt::entry;
 use rotary_encoder_embedded::{RotaryEncoder, Direction, Sensitivity};
@@ -11,14 +16,31 @@ use stm32f7xx_hal::{pac, prelude::*};
 use lcd1602::{LCD1602, DelayMs};
 use lcd1602::custom_characters::{MAN_STANDING, MAN_DANCING, HEART_BORDER, HEART_FULL};
 
+#[alloc_error_handler]
+fn oom(_: core::alloc::Layout) -> ! {
+    rprintln!("Allocation error");
+    loop {}
+}
+
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     rprintln!("{}", _info);
     loop {}
 }
 
+#[global_allocator]
+static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
+
 #[entry]
 fn main() -> ! {
+    // Initialize the allocator BEFORE you use it
+    {
+        use core::mem::MaybeUninit;
+        const HEAP_SIZE: usize = 1024;
+        static mut HEAP: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+        unsafe { ALLOCATOR.init(HEAP.as_ptr() as usize, HEAP_SIZE) }
+    }
+
     let core_perip = cortex_m::peripheral::Peripherals::take().unwrap();
     let dev_perip = pac::Peripherals::take().unwrap();
 
