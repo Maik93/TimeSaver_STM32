@@ -8,13 +8,13 @@ use alloc::format;
 use alloc_cortex_m::CortexMHeap;
 use core::panic::PanicInfo;
 use cortex_m_rt::entry;
-use rotary_encoder_embedded::{RotaryEncoder, Direction, Sensitivity};
-use rtt_target::{rtt_init_print, rprintln};
+use rotary_encoder_embedded::{Direction, RotaryEncoder, Sensitivity};
+use rtt_target::{rprintln, rtt_init_print};
 
 use stm32f7xx_hal::{pac, prelude::*};
 
-use lcd1602::{LCD1602, DelayMs};
-use lcd1602::custom_characters::{MAN_STANDING, MAN_DANCING, HEART_BORDER, HEART_FULL};
+use lcd1602::custom_characters::{MAN_DANCING, MAN_STANDING};
+use lcd1602::{DelayMs, LCD1602};
 
 #[alloc_error_handler]
 fn oom(_: core::alloc::Layout) -> ! {
@@ -51,7 +51,7 @@ fn main() -> ! {
     let gpio_b = dev_perip.GPIOB.split();
     let mut led_1 = gpio_b.pb0.into_push_pull_output();
     let mut led_2 = gpio_b.pb7.into_push_pull_output();
-    let mut led_3 = gpio_b.pb14.into_push_pull_output();
+    // let mut led_3 = gpio_b.pb14.into_push_pull_output();
 
     // LCD pins
     let rs = gpio_b.pb4.into_push_pull_output();
@@ -62,8 +62,8 @@ fn main() -> ! {
     let d7 = gpio_b.pb8.into_push_pull_output();
 
     // Encoder pins
-    let encoder_dt = gpio_b.pb1.into_pull_up_input(); // TODO: set the right pin number
-    let encoder_clk = gpio_b.pb2.into_pull_up_input(); // TODO: set the right pin number
+    let encoder_dt = gpio_b.pb9.into_pull_up_input();
+    let encoder_clk = gpio_b.pb5.into_pull_up_input();
 
     rtt_init_print!();
 
@@ -75,39 +75,48 @@ fn main() -> ! {
     // Encoder setup
     let mut rotary_encoder = RotaryEncoder::new(encoder_dt, encoder_clk);
     rotary_encoder.set_sensitivity(Sensitivity::Low);
+    let mut encoder_val = 0i16;
 
-    rprintln!("Ready to blink!");
-
+    rprintln!("Ready!");
     led_1.toggle();
-    lcd.print("Ready!").unwrap();
-    lcd.delay_ms(1_000u16);
+
+    lcd.set_cursor(0, 0).unwrap();
+    lcd.print("Encoder: ").unwrap();
 
     loop {
-        // led_2.toggle();
-        // lcd.set_cursor(6, 1).unwrap();
-        // lcd.write_custom_char(MAN_STANDING).unwrap();
-        // lcd.write_custom_char(HEART_BORDER).unwrap();
-        lcd.delay_ms(500u16);
-
-        // led_3.toggle();
-        // // lcd.clear().ok();
-        // lcd.set_cursor(6, 1).unwrap();
-        // lcd.write_custom_char(MAN_DANCING).unwrap();
-        // lcd.write_custom_char(HEART_FULL).unwrap();
-        // lcd.delay_ms(500u16);
-
         // Update the encoder, which will compute its direction
         rotary_encoder.update();
         match rotary_encoder.direction() {
             Direction::Clockwise => {
-                // Increment some value
+                rprintln!("Increment!");
+                encoder_val += 1;
             }
             Direction::Anticlockwise => {
-                // Decrement some value
+                rprintln!("Decrement!");
+                encoder_val -= 1;
             }
             Direction::None => {
                 // Do nothing
             }
         }
+
+        // Character animation
+        if led_2.is_set_high() {
+            led_2.set_low();
+            lcd.set_cursor(6, 1).unwrap();
+            lcd.write_custom_char(MAN_STANDING).unwrap();
+            // lcd.write_custom_char(HEART_BORDER).unwrap();
+        } else {
+            led_2.set_high();
+            lcd.set_cursor(6, 1).unwrap();
+            lcd.write_custom_char(MAN_DANCING).unwrap();
+            // lcd.write_custom_char(HEART_FULL).unwrap();
+        }
+
+        // Update timer printed value
+        lcd.set_cursor(10, 0).unwrap();
+        lcd.print(&format!("{}", encoder_val)).unwrap();
+
+        lcd.delay_ms(500u16);
     }
 }
