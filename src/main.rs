@@ -6,7 +6,7 @@ extern crate alloc;
 
 use alloc::format;
 use alloc_cortex_m::CortexMHeap;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::ops::DerefMut;
 use core::panic::PanicInfo;
 use cortex_m::interrupt::{free, Mutex};
@@ -40,6 +40,8 @@ static ROTARY_ENCODER: Mutex<
         Option<RotaryEncoder<StandardMode, Pin<'B', 1, Input<PullUp>>, Pin<'B', 5, Input<PullUp>>>>,
     >,
 > = Mutex::new(RefCell::new(None));
+
+static ENCODER_VALUE: Mutex<Cell<i8>> = Mutex::new(Cell::new(0i8));
 
 #[entry]
 fn main() -> ! {
@@ -110,8 +112,6 @@ fn main() -> ! {
         ));
     });
 
-    let mut encoder_val = 0i16;
-
     rprintln!("Ready!");
     led_1.toggle();
 
@@ -119,9 +119,9 @@ fn main() -> ! {
     lcd.print("Encoder: ").unwrap();
 
     loop {
-        // Character animation
+        // Character animation at 2Hz
         lcd_scaler += 1;
-        if lcd_scaler % 50 == 0 {
+        if lcd_scaler % 25 == 0 {
             if led_2.is_set_high() {
                 led_2.set_low();
                 lcd.set_cursor(15, 1).unwrap();
@@ -139,9 +139,13 @@ fn main() -> ! {
 
         // Update timer printed value
         lcd.set_cursor(9, 0).unwrap();
-        lcd.print(&format!("{: <3}", encoder_val)).unwrap(); // left-aligned with 3 digits (including sign)
+        free(|cs| {
+            // left-aligned with 3 digits (including sign)
+            lcd.print(&format!("{: <3}", ENCODER_VALUE.borrow(cs).get()))
+                .unwrap();
+        });
 
-        lcd.delay_ms(1u8); // loop at around 1kHz
+        lcd.delay_ms(50u8); // loop at around 20Hz
     }
 }
 
@@ -153,7 +157,7 @@ enum InterruptedPin {
 fn handle_encoder_interrupt(interrupted_pin: InterruptedPin) {
     // Retrieve Rotary Encoder from safely stored static global
     free(|cs| {
-        if let Some(ref mut rotary_encoder) = ROTARY_ENCODER.borrow(&cs).borrow_mut().deref_mut() {
+        if let Some(ref mut rotary_encoder) = ROTARY_ENCODER.borrow(cs).borrow_mut().deref_mut() {
             // Borrow the pins to clear the pending interrupt bit
             let (dt, clk) = rotary_encoder.pins_mut();
             match interrupted_pin {
@@ -169,12 +173,12 @@ fn handle_encoder_interrupt(interrupted_pin: InterruptedPin) {
             rotary_encoder.update();
             match rotary_encoder.direction() {
                 Direction::Clockwise => {
-                    rprintln!("Increment!");
-                    // Increment some value
+                    let cell = ENCODER_VALUE.borrow(cs);
+                    cell.replace(cell.get() + 1);
                 }
                 Direction::Anticlockwise => {
-                    rprintln!("Decrement!");
-                    // Decrement some value
+                    let cell = ENCODER_VALUE.borrow(cs);
+                    cell.replace(cell.get() - 1);
                 }
                 Direction::None => {
                     // Do nothing
@@ -186,12 +190,10 @@ fn handle_encoder_interrupt(interrupted_pin: InterruptedPin) {
 
 #[interrupt]
 fn EXTI1() {
-    rprintln!("EXTI1 interrupt!");
     handle_encoder_interrupt(InterruptedPin::DtPin);
 }
 
 #[interrupt]
 fn EXTI9_5() {
-    rprintln!("EXTI9_5 interrupt!");
     handle_encoder_interrupt(InterruptedPin::ClkPin);
 }
