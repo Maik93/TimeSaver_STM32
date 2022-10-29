@@ -14,6 +14,7 @@ use cortex_m_rt::entry;
 use rotary_encoder_embedded::{standard::StandardMode, Direction, RotaryEncoder};
 use rtt_target::{rprintln, rtt_init_print};
 use stm32f7xx_hal::gpio::{Edge, ExtiPin, Input, Pin, PullUp};
+use stm32f7xx_hal::timer::Event;
 use stm32f7xx_hal::{interrupt, pac, prelude::*};
 
 use lcd1602::custom_characters::{MAN_DANCING, MAN_STANDING};
@@ -64,10 +65,16 @@ fn main() -> ! {
     let clocks = rcc.cfgr.sysclk(216.MHz()).freeze(); // lock configurations
     let d = core_perip.SYST.delay(&clocks);
 
-    // interrupt-related stuff
+    // External interrupts stuff
     let mut sys_cfg = dev_perip.SYSCFG;
     let mut apb2 = rcc.apb2; // Advanced Peripheral Bus 2 (APB2) registers
     let mut exti = dev_perip.EXTI; // External Interrupt Pin interface
+
+    // Timer interrupt stuff
+    let mut tim2_counter = dev_perip.TIM2.counter_us(&clocks);
+    tim2_counter.start(50.millis()).unwrap();
+    tim2_counter.listen(Event::Update);
+    unsafe { pac::NVIC::unmask(interrupt::TIM2) }
 
     // I/O setup
     let mut led_1 = gpio_b.pb0.into_push_pull_output();
@@ -93,11 +100,11 @@ fn main() -> ! {
     encoder_dt.make_interrupt_source(&mut sys_cfg, &mut apb2);
     encoder_dt.trigger_on_edge(&mut exti, Edge::RisingFalling);
     encoder_dt.enable_interrupt(&mut exti);
-    unsafe { pac::NVIC::unmask(interrupt::EXTI1) } // Line1 interrupt (because the pin is PB1)
+    unsafe { pac::NVIC::unmask(interrupt::EXTI1) } // enable Line1 interrupt (because the pin is PB1)
     encoder_clk.make_interrupt_source(&mut sys_cfg, &mut apb2);
     encoder_clk.trigger_on_edge(&mut exti, Edge::RisingFalling);
     encoder_clk.enable_interrupt(&mut exti);
-    unsafe { pac::NVIC::unmask(interrupt::EXTI9_5) } // Line1 interrupt (because the pin is PB5)
+    unsafe { pac::NVIC::unmask(interrupt::EXTI9_5) } // enable Line5 interrupt (because the pin is PB5)
 
     // LCD setup
     let mut lcd = LCD1602::new(en, rs, d4, d5, d6, d7, d).unwrap();
@@ -196,4 +203,11 @@ fn EXTI1() {
 #[interrupt]
 fn EXTI9_5() {
     handle_encoder_interrupt(InterruptedPin::ClkPin);
+}
+
+#[interrupt]
+fn TIM2() {
+    rprintln!("Timer interrupt!");
+
+    // TODO: something interesting
 }
