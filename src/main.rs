@@ -5,15 +5,13 @@
 extern crate alloc;
 
 use alloc::format;
-use alloc_cortex_m::CortexMHeap;
-use core::cell::{Cell, RefCell};
+use core::cell::RefCell;
 use core::ops::DerefMut;
 use core::panic::PanicInfo;
 use cortex_m::interrupt::{free, Mutex};
 use cortex_m_rt::entry;
-use rotary_encoder_embedded::{standard::StandardMode, Direction, RotaryEncoder};
 use rtt_target::{rprintln, rtt_init_print};
-use stm32f7xx_hal::gpio::{Edge, ExtiPin, Input, Pin, PullUp};
+use stm32f7xx_hal::gpio::{Edge, ExtiPin, Output, Pin};
 use stm32f7xx_hal::pac::TIM2;
 use stm32f7xx_hal::timer::{CounterUs, Event};
 use stm32f7xx_hal::{interrupt, pac, prelude::*};
@@ -21,11 +19,8 @@ use stm32f7xx_hal::{interrupt, pac, prelude::*};
 use lcd1602::custom_characters::{MAN_DANCING, MAN_STANDING};
 use lcd1602::{DelayMs, LCD1602};
 
-#[alloc_error_handler]
-fn oom(_: core::alloc::Layout) -> ! {
-    rprintln!("Allocation error");
-    loop {}
-}
+mod encoder_interface;
+mod utilities;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -33,32 +28,13 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-#[global_allocator]
-static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
-
-// Interrupt-safe Encoder handler
-static ROTARY_ENCODER: Mutex<
-    RefCell<
-        Option<RotaryEncoder<StandardMode, Pin<'B', 1, Input<PullUp>>, Pin<'B', 5, Input<PullUp>>>>,
-    >,
-> = Mutex::new(RefCell::new(None));
-
-static ENCODER_VALUE: Mutex<Cell<i8>> = Mutex::new(Cell::new(0i8));
-
-static LED_3: Mutex<RefCell<Option<Pin<'B', 14, stm32f7xx_hal::gpio::Output>>>> =
-    Mutex::new(RefCell::new(None));
+static LED_3: Mutex<RefCell<Option<Pin<'B', 14, Output>>>> = Mutex::new(RefCell::new(None));
 
 static TIM2_COUNTER: Mutex<RefCell<Option<CounterUs<TIM2>>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
-    // Initialize the allocator BEFORE you use it
-    {
-        use core::mem::MaybeUninit;
-        const HEAP_SIZE: usize = 1024;
-        static mut HEAP: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
-        unsafe { ALLOCATOR.init(HEAP.as_ptr() as usize, HEAP_SIZE) }
-    }
+    utilities::init_mem_allocator();
 
     // Initialize serial console
     rtt_init_print!();
@@ -114,18 +90,13 @@ fn main() -> ! {
     encoder_clk.enable_interrupt(&mut exti);
     unsafe { pac::NVIC::unmask(interrupt::EXTI9_5) } // enable Line5 interrupt (because the pin is PB5)
 
+    encoder_interface::init_encoder(encoder_dt, encoder_clk);
+
     // LCD setup
     let mut lcd = LCD1602::new(en, rs, d4, d5, d6, d7, d).unwrap();
     // lcd.set_display(true, true, false).unwrap();
     lcd.init_custom_chars().unwrap();
     let mut lcd_scaler = 0u8;
-
-    // Encoder setup
-    free(|cs| {
-        ROTARY_ENCODER.borrow(cs).replace(Some(
-            RotaryEncoder::new(encoder_dt, encoder_clk).into_standard_mode(),
-        ));
-    });
 
     rprintln!("Ready!");
     led_1.toggle();
@@ -156,61 +127,25 @@ fn main() -> ! {
         lcd.set_cursor(9, 0).unwrap();
         free(|cs| {
             // left-aligned with 3 digits (including sign)
-            lcd.print(&format!("{: <3}", ENCODER_VALUE.borrow(cs).get()))
-                .unwrap();
+            lcd.print(&format!(
+                "{: <3}",
+                encoder_interface::ENCODER_VALUE.borrow(cs).get()
+            ))
+            .unwrap();
         });
 
         lcd.delay_ms(50u8); // loop at around 20Hz
     }
 }
 
-enum InterruptedPin {
-    DtPin,
-    ClkPin,
-}
-
-fn handle_encoder_interrupt(interrupted_pin: InterruptedPin) {
-    // Retrieve Rotary Encoder from safely stored static global
-    free(|cs| {
-        if let Some(ref mut rotary_encoder) = ROTARY_ENCODER.borrow(cs).borrow_mut().deref_mut() {
-            // Borrow the pins to clear the pending interrupt bit
-            let (dt, clk) = rotary_encoder.pins_mut();
-            match interrupted_pin {
-                InterruptedPin::DtPin => {
-                    dt.clear_interrupt_pending_bit();
-                }
-                InterruptedPin::ClkPin => {
-                    clk.clear_interrupt_pending_bit();
-                }
-            }
-
-            // Update the encoder, which will compute its direction
-            rotary_encoder.update();
-            match rotary_encoder.direction() {
-                Direction::Clockwise => {
-                    let cell = ENCODER_VALUE.borrow(cs);
-                    cell.replace(cell.get() + 1);
-                }
-                Direction::Anticlockwise => {
-                    let cell = ENCODER_VALUE.borrow(cs);
-                    cell.replace(cell.get() - 1);
-                }
-                Direction::None => {
-                    // Do nothing
-                }
-            }
-        }
-    });
-}
-
 #[interrupt]
 fn EXTI1() {
-    handle_encoder_interrupt(InterruptedPin::DtPin);
+    encoder_interface::handle_encoder_interrupt(encoder_interface::InterruptedPin::DtPin);
 }
 
 #[interrupt]
 fn EXTI9_5() {
-    handle_encoder_interrupt(InterruptedPin::ClkPin);
+    encoder_interface::handle_encoder_interrupt(encoder_interface::InterruptedPin::ClkPin);
 }
 
 #[interrupt]
