@@ -14,7 +14,8 @@ use cortex_m_rt::entry;
 use rotary_encoder_embedded::{standard::StandardMode, Direction, RotaryEncoder};
 use rtt_target::{rprintln, rtt_init_print};
 use stm32f7xx_hal::gpio::{Edge, ExtiPin, Input, Pin, PullUp};
-use stm32f7xx_hal::timer::Event;
+use stm32f7xx_hal::pac::TIM2;
+use stm32f7xx_hal::timer::{CounterUs, Event};
 use stm32f7xx_hal::{interrupt, pac, prelude::*};
 
 use lcd1602::custom_characters::{MAN_DANCING, MAN_STANDING};
@@ -43,6 +44,11 @@ static ROTARY_ENCODER: Mutex<
 > = Mutex::new(RefCell::new(None));
 
 static ENCODER_VALUE: Mutex<Cell<i8>> = Mutex::new(Cell::new(0i8));
+
+static LED_3: Mutex<RefCell<Option<Pin<'B', 14, stm32f7xx_hal::gpio::Output>>>> =
+    Mutex::new(RefCell::new(None));
+
+static TIM2_COUNTER: Mutex<RefCell<Option<CounterUs<TIM2>>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -74,12 +80,14 @@ fn main() -> ! {
     let mut tim2_counter = dev_perip.TIM2.counter_us(&clocks);
     tim2_counter.start(50.millis()).unwrap();
     tim2_counter.listen(Event::Update);
+    free(|cs| TIM2_COUNTER.borrow(cs).replace(Some(tim2_counter)));
     unsafe { pac::NVIC::unmask(interrupt::TIM2) }
 
     // I/O setup
     let mut led_1 = gpio_b.pb0.into_push_pull_output();
     let mut led_2 = gpio_b.pb7.into_push_pull_output();
-    // let mut led_3 = gpio_b.pb14.into_push_pull_output();
+    let led_3 = gpio_b.pb14.into_push_pull_output();
+    free(|cs| LED_3.borrow(cs).replace(Some(led_3)));
 
     // LCD pins
     let rs = gpio_b.pb4.into_push_pull_output();
@@ -207,7 +215,15 @@ fn EXTI9_5() {
 
 #[interrupt]
 fn TIM2() {
-    rprintln!("Timer interrupt!");
+    free(|cs| {
+        // Clear pending interrupt
+        if let Some(ref mut tim2_counter) = TIM2_COUNTER.borrow(cs).borrow_mut().deref_mut() {
+            tim2_counter.clear_interrupt(Event::Update);
+        }
 
-    // TODO: something interesting
+        // Toggle LED 3
+        if let Some(ref mut led_3) = LED_3.borrow(cs).borrow_mut().deref_mut() {
+            led_3.toggle();
+        }
+    })
 }
