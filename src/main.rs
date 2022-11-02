@@ -5,21 +5,18 @@
 extern crate alloc;
 
 use alloc::format;
-use core::cell::RefCell;
-use core::ops::DerefMut;
 use core::panic::PanicInfo;
-use cortex_m::interrupt::{free, Mutex};
+use cortex_m::interrupt::free;
 use cortex_m_rt::entry;
 use rtt_target::{rprintln, rtt_init_print};
-use stm32f7xx_hal::gpio::{Edge, ExtiPin, Output, Pin};
-use stm32f7xx_hal::pac::TIM2;
-use stm32f7xx_hal::timer::{CounterUs, Event};
+use stm32f7xx_hal::gpio::{Edge, ExtiPin};
 use stm32f7xx_hal::{interrupt, pac, prelude::*};
 
 use lcd1602::custom_characters::{MAN_DANCING, MAN_STANDING};
 use lcd1602::{DelayMs, LCD1602};
 
 mod encoder_interface;
+mod millis;
 mod utilities;
 
 #[panic_handler]
@@ -28,9 +25,7 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-static LED_3: Mutex<RefCell<Option<Pin<'B', 14, Output>>>> = Mutex::new(RefCell::new(None));
-
-static TIM2_COUNTER: Mutex<RefCell<Option<CounterUs<TIM2>>>> = Mutex::new(RefCell::new(None));
+// static LED_3: Mutex<RefCell<Option<Pin<'B', 14, Output>>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -53,17 +48,14 @@ fn main() -> ! {
     let mut exti = dev_perip.EXTI; // External Interrupt Pin interface
 
     // Timer interrupt stuff
-    let mut tim2_counter = dev_perip.TIM2.counter_us(&clocks);
-    tim2_counter.start(50.millis()).unwrap();
-    tim2_counter.listen(Event::Update);
-    free(|cs| TIM2_COUNTER.borrow(cs).replace(Some(tim2_counter)));
-    unsafe { pac::NVIC::unmask(interrupt::TIM2) }
+    let tim2_counter = dev_perip.TIM2.counter_us(&clocks);
+    millis::init(tim2_counter);
 
     // I/O setup
     let mut led_1 = gpio_b.pb0.into_push_pull_output();
     let mut led_2 = gpio_b.pb7.into_push_pull_output();
-    let led_3 = gpio_b.pb14.into_push_pull_output();
-    free(|cs| LED_3.borrow(cs).replace(Some(led_3)));
+    // let led_3 = gpio_b.pb14.into_push_pull_output();
+    // free(|cs| LED_3.borrow(cs).replace(Some(led_3)));
 
     // LCD pins
     let rs = gpio_b.pb4.into_push_pull_output();
@@ -105,6 +97,9 @@ fn main() -> ! {
     lcd.print("Encoder: ").unwrap();
 
     loop {
+        rprintln!("Now is {} (ms)", millis::now().unwrap());
+        // let button_status = encoder_pushbutton.is_low();
+
         // Character animation at 2Hz
         lcd_scaler += 1;
         if lcd_scaler % 25 == 0 {
@@ -146,19 +141,4 @@ fn EXTI1() {
 #[interrupt]
 fn EXTI9_5() {
     encoder_interface::handle_encoder_interrupt(encoder_interface::InterruptedPin::ClkPin);
-}
-
-#[interrupt]
-fn TIM2() {
-    free(|cs| {
-        // Clear pending interrupt
-        if let Some(ref mut tim2_counter) = TIM2_COUNTER.borrow(cs).borrow_mut().deref_mut() {
-            tim2_counter.clear_interrupt(Event::Update);
-        }
-
-        // Toggle LED 3
-        if let Some(ref mut led_3) = LED_3.borrow(cs).borrow_mut().deref_mut() {
-            led_3.toggle();
-        }
-    })
 }
