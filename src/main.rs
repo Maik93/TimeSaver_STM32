@@ -12,7 +12,7 @@ use rtt_target::{rprintln, rtt_init_print};
 use stm32f7xx_hal::gpio::{Edge, ExtiPin};
 use stm32f7xx_hal::{interrupt, pac, prelude::*};
 
-use lcd1602::custom_characters::{MAN_DANCING, MAN_STANDING};
+use lcd1602::custom_characters::{HEART_FULL, MAN_DANCING, MAN_STANDING};
 use lcd1602::{DelayMs, LCD1602};
 
 mod encoder_interface;
@@ -26,6 +26,14 @@ fn panic(_info: &PanicInfo) -> ! {
 }
 
 // static LED_3: Mutex<RefCell<Option<Pin<'B', 14, Output>>>> = Mutex::new(RefCell::new(None));
+
+#[derive(PartialEq, Debug)]
+enum TimeSaverState {
+    Splash,
+    Setting,
+    Count,
+    Alarm,
+}
 
 #[entry]
 fn main() -> ! {
@@ -68,7 +76,7 @@ fn main() -> ! {
     // Encoder pins
     let mut encoder_dt = gpio_b.pb1.into_pull_up_input();
     let mut encoder_clk = gpio_b.pb5.into_pull_up_input();
-    // let mut encoder_pushbutton = gpio_b.pb10.into_pull_up_input();
+    let encoder_pushbutton = gpio_b.pb10.into_pull_up_input();
 
     // Enable external interrupts on rotary encoder pins (ALTERNATIVE: pool them with a timer at ~900Hz)
     // - External interrupts: https://stackoverflow.com/questions/56179131/cannot-receive-interrupt-on-pe0-stm32
@@ -88,48 +96,129 @@ fn main() -> ! {
     let mut lcd = LCD1602::new(en, rs, d4, d5, d6, d7, d).unwrap();
     // lcd.set_display(true, true, false).unwrap();
     lcd.init_custom_chars().unwrap();
-    let mut lcd_scaler = 0u8;
 
-    rprintln!("Ready!");
+    let mut current_state = TimeSaverState::Splash;
+    let previous_state = TimeSaverState::Alarm; // this differs from current_state, in order to perform the first one-time action
+    let mut seconds_to_go = 0u32;
+
+    rprintln!("Everything is set up!");
     led_1.toggle();
 
-    lcd.set_cursor(0, 0).unwrap();
-    lcd.print("Encoder: ").unwrap();
-
     loop {
-        rprintln!("Now is {} (ms)", millis::now().unwrap());
-        // let button_status = encoder_pushbutton.is_low();
+        let now_ms = millis::now().unwrap();
+        rprintln!("Now is {} ms", now_ms);
 
-        // Character animation at 2Hz
-        lcd_scaler += 1;
-        if lcd_scaler % 25 == 0 {
-            if led_2.is_set_high() {
-                led_2.set_low();
-                lcd.set_cursor(15, 1).unwrap();
-                lcd.write_custom_char(MAN_STANDING).unwrap();
-                // lcd.write_custom_char(HEART_BORDER).unwrap();
-            } else {
-                led_2.set_high();
-                lcd.set_cursor(15, 1).unwrap();
-                lcd.write_custom_char(MAN_DANCING).unwrap();
-                // lcd.write_custom_char(HEART_FULL).unwrap();
+        // Get button state
+        let button_short_click = encoder_pushbutton.is_low(); // TODO: improve with debounching
+        let button_long_click = button_short_click;
+
+        // Trigger state changes
+        if button_short_click {
+            current_state = match current_state {
+                TimeSaverState::Splash => TimeSaverState::Setting,
+                TimeSaverState::Setting => TimeSaverState::Count,
+                TimeSaverState::Alarm => TimeSaverState::Splash,
+                _ => current_state, // keep same state otherwise (just the case of TimeSaverState::Count)
             }
+        } else if button_long_click {
+            current_state = match current_state {
+                TimeSaverState::Count => TimeSaverState::Setting,
+                _ => current_state, // keep same state otherwise
+            }
+        }
+        let state_changed = current_state != previous_state;
 
-            lcd_scaler = 0;
+        // Perform one-time actions needed when the state has changed
+        // NOTE: current_state is the new state just achieved
+        if state_changed {
+            rprintln!("State moved to {:?}", current_state); // enum name can be printed thanks to the Debug trait
+            match current_state {
+                TimeSaverState::Splash => {
+                    lcd.clear().unwrap();
+                    lcd.print("Save your time ").unwrap();
+                    lcd.write_custom_char(HEART_FULL).unwrap();
+                }
+
+                TimeSaverState::Setting => {
+                    lcd.clear().unwrap();
+                    lcd.print("Set time:").unwrap();
+                }
+
+                TimeSaverState::Count => {
+                    lcd.clear().unwrap();
+                    lcd.print("Be focus...").unwrap();
+                    lcd.set_cursor(1, 4).unwrap();
+                    lcd.print("min left...").unwrap();
+                }
+
+                TimeSaverState::Alarm => {
+                    lcd.clear().unwrap();
+                    lcd.set_cursor(0, 2).unwrap();
+                    lcd.print("TIME IS UP!!").unwrap();
+                }
+            }
         }
 
-        // Update timer printed value
-        lcd.set_cursor(9, 0).unwrap();
-        free(|cs| {
-            // left-aligned with 3 digits (including sign)
-            lcd.print(&format!(
-                "{: <3}",
-                encoder_interface::ENCODER_VALUE.borrow(cs).get()
-            ))
-            .unwrap();
-        });
+        // Perform timed actions for the current state
+        match current_state {
+            TimeSaverState::Setting => {
+                // Update encoder selection at 20Hz
+                if now_ms % 50 == 0 {
+                    lcd.set_cursor(1, 4).unwrap();
+                    free(|cs| {
+                        lcd.print(&format!(
+                            "{: <3} min", // left-aligned with 3 digits (including sign)
+                            encoder_interface::ENCODER_VALUE.borrow(cs).get() // TODO: think about scaling the encoder value
+                        ))
+                        .unwrap()
+                    });
+                }
+            }
 
-        lcd.delay_ms(50u8); // loop at around 20Hz
+            TimeSaverState::Count => {
+                // Update remaining time at 1Hz
+                if now_ms % 1_000 == 0 {
+                    seconds_to_go -= 1;
+
+                    // Update timer printed value
+                    lcd.set_cursor(1, 0).unwrap();
+                    free(|cs| {
+                        // left-aligned with 3 digits (including sign)
+                        lcd.print(&format!(
+                            "{: <3}",
+                            encoder_interface::ENCODER_VALUE.borrow(cs).get()
+                        ))
+                        .unwrap();
+                    });
+                }
+
+                // Character animation (bottom-right of the screen) at 2Hz
+                if now_ms % 500 == 0 {
+                    if led_2.is_set_high() {
+                        led_2.set_low();
+                        lcd.set_cursor(1, 15).unwrap();
+                        lcd.write_custom_char(MAN_STANDING).unwrap();
+                        // lcd.write_custom_char(HEART_BORDER).unwrap();
+                    } else {
+                        led_2.set_high();
+                        lcd.set_cursor(1, 15).unwrap();
+                        lcd.write_custom_char(MAN_DANCING).unwrap();
+                        // lcd.write_custom_char(HEART_FULL).unwrap();
+                    }
+                }
+            }
+
+            TimeSaverState::Alarm => {
+                // Blink LCD backlight at 2Hz
+                if now_ms % 500 == 0 {
+                    // TODO
+                }
+            }
+
+            _ => {}
+        }
+
+        // TODO: wfi
     }
 }
 

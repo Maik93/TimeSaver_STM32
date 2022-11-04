@@ -96,7 +96,7 @@ impl<EN, RS, D4, D5, D6, D7, E> LCD1602<EN, RS, D4, D5, D6, D7>
     }
 
     /// Move the cursor to a given position.
-    pub fn set_cursor(&mut self, column: u8, row: u8)
+    pub fn set_cursor(&mut self, row: u8, column: u8)
                    -> Result<(), Error<E>> {
         if column >= 16 || row >= 2 {
             Err(Error::InvalidCursorPosition)
