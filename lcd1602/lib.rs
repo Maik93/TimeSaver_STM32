@@ -15,7 +15,7 @@ pub struct LCD1602<EN, RS, D4, D5, D6, D7> {
     d5: D5,
     d6: D6,
     d7: D7,
-    delay_handler: SysDelay, // TODO: take a function pointer to call for delays
+    delay_handler: SysDelay, // TODO: take a function pointer to call for delays, if possible
 }
 
 pub trait DelayMs<UintType> {

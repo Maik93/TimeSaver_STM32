@@ -7,8 +7,9 @@ pub struct CustomChar {
     pub char_map: CharMap,
 }
 
-
 // TODO: consider an HashMap instead
+// https://doc.rust-lang.org/std/collections/hash_map/struct.HashMap.html
+// https://doc.rust-lang.org/std/collections/index.html
 pub const MAN_STANDING: u8 = 0;
 pub const MAN_DANCING: u8 = 1;
 pub const HEART_BORDER: u8 = 2;

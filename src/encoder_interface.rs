@@ -13,12 +13,13 @@ pub static ROTARY_ENCODER: Mutex<
 
 static ENCODER_VALUE: Mutex<Cell<i32>> = Mutex::new(Cell::new(0i32));
 
+/// Initialize memory-safe encoder handler for DT -> PB1 and CLK -> PB5.
 pub fn init_encoder(dt: Pin<'B', 1, Input<PullUp>>, clk: Pin<'B', 5, Input<PullUp>>) {
     // Encoder setup
     free(|cs| {
         ROTARY_ENCODER
-        .borrow(cs)
-        .replace(Some(RotaryEncoder::new(dt, clk).into_standard_mode()));
+            .borrow(cs)
+            .replace(Some(RotaryEncoder::new(dt, clk).into_standard_mode()));
     });
 }
 
@@ -33,7 +34,7 @@ pub enum InterruptedPin {
     ClkPin,
 }
 
-/// Update current encoder values during External Interrupt.
+/// Update current encoder values during External Interrupt (rising and falling edges on DT and CLK pins).
 pub fn handle_encoder_interrupt(interrupted_pin: InterruptedPin) {
     // Retrieve Rotary Encoder from safely stored static global
     free(|cs| {

@@ -45,11 +45,9 @@ pub fn init(mut tim2_counter: CounterUs<TIM2>) {
 
 /// Get current milliseconds.
 pub fn now() -> Result<u32, Error> {
-    free(|cs| {
-        match MILLIS.borrow(cs).borrow_mut().deref_mut() {
-            Some(millis) => Ok(millis.current_ms.get()),
-            None => Err(Error::TimerNotInitialised),
-        }
+    free(|cs| match MILLIS.borrow(cs).borrow_mut().deref_mut() {
+        Some(millis) => Ok(millis.current_ms.get()),
+        None => Err(Error::TimerNotInitialised),
     })
 }
 
@@ -58,7 +56,9 @@ fn TIM2() {
     free(|cs| {
         if let Some(millis) = MILLIS.borrow(cs).borrow_mut().deref_mut() {
             // Increment millis counter
-            millis.current_ms.replace(millis.current_ms.get() + ACCURACY_MS);
+            millis
+                .current_ms
+                .replace(millis.current_ms.get() + ACCURACY_MS);
 
             // Clear pending interrupt
             millis.tim2.borrow_mut().clear_interrupt(Event::Update);

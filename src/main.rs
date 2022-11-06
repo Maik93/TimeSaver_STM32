@@ -227,6 +227,7 @@ fn main() -> ! {
             _ => {}
         }
 
+        // Go to deep-sleep until the next interrupt
         cortex_m::asm::wfi();
     }
 }
