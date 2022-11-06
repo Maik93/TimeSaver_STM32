@@ -10,7 +10,7 @@ use stm32f7xx_hal::timer::{CounterUs, Event};
 use stm32f7xx_hal::{interrupt, pac, prelude::*};
 
 /// Accuracy of the counter, in milliseconds.
-const ACCURACY_MS: u32 = 2;
+const ACCURACY_MS: u32 = 5;
 
 static MILLIS: Mutex<RefCell<Option<MillisStruct>>> = Mutex::new(RefCell::new(None));
 

@@ -6,14 +6,13 @@ extern crate alloc;
 
 use alloc::format;
 use core::panic::PanicInfo;
-use cortex_m::interrupt::free;
 use cortex_m_rt::entry;
 use rtt_target::{rprintln, rtt_init_print};
 use stm32f7xx_hal::gpio::{Edge, ExtiPin};
 use stm32f7xx_hal::{interrupt, pac, prelude::*};
 
 use lcd1602::custom_characters::{HEART_FULL, MAN_DANCING, MAN_STANDING};
-use lcd1602::{DelayMs, LCD1602};
+use lcd1602::LCD1602;
 
 mod encoder_interface;
 mod millis;
@@ -27,7 +26,7 @@ fn panic(_info: &PanicInfo) -> ! {
 
 // static LED_3: Mutex<RefCell<Option<Pin<'B', 14, Output>>>> = Mutex::new(RefCell::new(None));
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 enum TimeSaverState {
     Splash,
     Setting,
@@ -98,7 +97,7 @@ fn main() -> ! {
     lcd.init_custom_chars().unwrap();
 
     let mut current_state = TimeSaverState::Splash;
-    let previous_state = TimeSaverState::Alarm; // this differs from current_state, in order to perform the first one-time action
+    let mut previous_state = TimeSaverState::Alarm; // this differs from current_state, in order to perform the first one-time action
     let mut seconds_to_go = 0u32;
 
     rprintln!("Everything is set up!");
@@ -106,11 +105,14 @@ fn main() -> ! {
 
     loop {
         let now_ms = millis::now().unwrap();
-        rprintln!("Now is {} ms", now_ms);
 
-        // Get button state
-        let button_short_click = encoder_pushbutton.is_low(); // TODO: improve with debounching
-        let button_long_click = button_short_click;
+        // Get button state at 5Hz (due to debouncing)
+        let button_short_click = if now_ms % 200 == 0 {
+            encoder_pushbutton.is_low()
+        } else {
+            false
+        };
+        let button_long_click = button_short_click; // TODO: implement long clicks
 
         // Trigger state changes
         if button_short_click {
@@ -131,7 +133,7 @@ fn main() -> ! {
         // Perform one-time actions needed when the state has changed
         // NOTE: current_state is the new state just achieved
         if state_changed {
-            rprintln!("State moved to {:?}", current_state); // enum name can be printed thanks to the Debug trait
+            rprintln!("-> State moved to {:?}", current_state); // enum name can be printed thanks to the Debug trait
             match current_state {
                 TimeSaverState::Splash => {
                     lcd.clear().unwrap();
@@ -140,15 +142,17 @@ fn main() -> ! {
                 }
 
                 TimeSaverState::Setting => {
+                    seconds_to_go = 5; // TODO: define the default value
+
                     lcd.clear().unwrap();
                     lcd.print("Set time:").unwrap();
                 }
 
                 TimeSaverState::Count => {
                     lcd.clear().unwrap();
-                    lcd.print("Be focus...").unwrap();
+                    lcd.print("Try to focus...").unwrap();
                     lcd.set_cursor(1, 4).unwrap();
-                    lcd.print("min left...").unwrap();
+                    lcd.print("min left").unwrap();
                 }
 
                 TimeSaverState::Alarm => {
@@ -157,6 +161,7 @@ fn main() -> ! {
                     lcd.print("TIME IS UP!!").unwrap();
                 }
             }
+            previous_state = current_state; // copied thanks to "Clone, Copy" traits
         }
 
         // Perform timed actions for the current state
@@ -164,32 +169,36 @@ fn main() -> ! {
             TimeSaverState::Setting => {
                 // Update encoder selection at 20Hz
                 if now_ms % 50 == 0 {
-                    lcd.set_cursor(1, 4).unwrap();
-                    free(|cs| {
-                        lcd.print(&format!(
-                            "{: <3} min", // left-aligned with 3 digits (including sign)
-                            encoder_interface::ENCODER_VALUE.borrow(cs).get() // TODO: think about scaling the encoder value
-                        ))
-                        .unwrap()
-                    });
+                    let raw_value = encoder_interface::get();
+                    seconds_to_go = u32::try_from(raw_value).unwrap_or_default();
+
+                    lcd.set_cursor(1, 5).unwrap();
+                    lcd.print(&format!(
+                        "{: >3} min", // right-aligned with 3 digits (including sign)
+                        seconds_to_go
+                    ))
+                    .unwrap();
                 }
             }
 
             TimeSaverState::Count => {
                 // Update remaining time at 1Hz
                 if now_ms % 1_000 == 0 {
-                    seconds_to_go -= 1;
+                    if let Some(sub_result) = seconds_to_go.checked_sub(1) {
+                        seconds_to_go = sub_result;
+                    } else {
+                        // Move to alarm state
+                        current_state = TimeSaverState::Alarm;
+                        continue;
+                    }
 
                     // Update timer printed value
                     lcd.set_cursor(1, 0).unwrap();
-                    free(|cs| {
-                        // left-aligned with 3 digits (including sign)
-                        lcd.print(&format!(
-                            "{: <3}",
-                            encoder_interface::ENCODER_VALUE.borrow(cs).get()
-                        ))
-                        .unwrap();
-                    });
+                    lcd.print(&format!(
+                        "{: >3} min", // right-aligned with 3 digits (including sign)
+                        seconds_to_go
+                    ))
+                    .unwrap();
                 }
 
                 // Character animation (bottom-right of the screen) at 2Hz

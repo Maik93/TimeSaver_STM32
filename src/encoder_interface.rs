@@ -11,16 +11,20 @@ pub static ROTARY_ENCODER: Mutex<
     >,
 > = Mutex::new(RefCell::new(None));
 
-/// Current encoder value.
-pub static ENCODER_VALUE: Mutex<Cell<i8>> = Mutex::new(Cell::new(0i8));
+static ENCODER_VALUE: Mutex<Cell<i32>> = Mutex::new(Cell::new(0i32));
 
 pub fn init_encoder(dt: Pin<'B', 1, Input<PullUp>>, clk: Pin<'B', 5, Input<PullUp>>) {
     // Encoder setup
     free(|cs| {
         ROTARY_ENCODER
-            .borrow(cs)
-            .replace(Some(RotaryEncoder::new(dt, clk).into_standard_mode()));
+        .borrow(cs)
+        .replace(Some(RotaryEncoder::new(dt, clk).into_standard_mode()));
     });
+}
+
+/// Get current encoder value.
+pub fn get() -> i32 {
+    free(|cs| ENCODER_VALUE.borrow(cs).get())
 }
 
 /// Interrupted pin, used for interrupt resets.
