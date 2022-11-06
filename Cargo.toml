@@ -1,6 +1,6 @@
 [package]
 authors = ["Michael Mugnai <michael.mugnai@gmail.com>"]
-edition = "2018"
+edition = "2021"
 name = "timesaver_stm32f767"
 version = "0.1.0"
 

@@ -218,7 +218,7 @@ fn main() -> ! {
             _ => {}
         }
 
-        // TODO: wfi
+        cortex_m::asm::wfi();
     }
 }
 
