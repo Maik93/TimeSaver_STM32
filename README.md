@@ -1,21 +1,19 @@
-# STM32F7x7 Rust example
-Base setup can be obtained from `rust-embedded/cortex-m-quickstart` template:
-```bash
-cargo generate rust-embedded/cortex-m-quickstart
-```
+# TimeSaver project for STM32F7x7 boards
+Basically, this is an implementation for a cooking timer, where an encoder is used to set desired minutes and an internal counter waits this given time, until an alarm is displayed.
+
+More technically, this is a Rust embedded project that deals with a 16x2 character LCD, an encoder (handled with external interrupts) and a timer interrupt that dictate system events.
+A simple state machine goes through an initial splash screen, then the counter setup, the actual countdown and finally the alarm.
 
 ## Dependencies
+Required target is `thumbv7em-none-eabihf`, nightly. It is automatically set up thourgh `rust-toolchain.toml`.
+
 ```bash
-rustup target add thumbv7em-none-eabihf
 cargo install cargo-embed
 ```
 
 ## Build and upload
-Project can be build with `cargo build` and uploaded with `cargo embed`.
-Serial RTT channels can be opened with `cargo embed --config with_rtt`, but somehow it does not work on Clion terminals.
-
-Debugging is currently unknown.
-[Debugonomicon](https://docs.rust-embedded.org/debugonomicon/), `cargo-embed` GDB and [semihosting](https://docs.rust-embedded.org/cortex-m-quickstart/cortex_m_semihosting/index.html) can be an entrypoint for this.
+Project can be build with `cargo build`, or build and uploaded with `cargo embed`.
+Serial RTT channels can be opened with `cargo embed --config with_rtt`. Note that somehow it does not work on Clion terminals.
 
 ## Debug
 Breakpoint debug can be achieved with a VSCode plugin, `probe-rs-debugger`.
@@ -29,10 +27,15 @@ code --install-extension probe-rs-debugger-0.3.3.vsix
 cargo install --force --git https://github.com/probe-rs/probe-rs probe-rs-debugger
 ```
 
-You can then debug the target board through VSCode, thanks to `.vscode/launch.json` file.
+The target board can be then debugged through VSCode, thanks to `.vscode/launch.json` file.
 Further details on how to edit this file can be found in the [official documentation](https://probe.rs/docs/tools/vscode/).
 
 ## References
+Base project configuration for STM32F7x7 boards can be obtained from `rust-embedded/cortex-m-quickstart` template:
+```bash
+cargo generate rust-embedded/cortex-m-quickstart
+```
+Main references used to achive this project:
 - [cortex-m-quickstart](https://github.com/rust-embedded/cortex-m-quickstart) starting template.
 - [Cargo-embed](https://probe.rs/docs/tools/cargo-embed/) documentation for upload and serial debug.
 - `memory.x` files from https://github.com/stm32-rs/stm32f7xx-hal.
