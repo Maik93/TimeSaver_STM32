@@ -34,6 +34,8 @@ enum TimeSaverState {
     Alarm,
 }
 
+const DEFAULT_MINUTES_TO_GO: u32 = 20;
+
 #[entry]
 fn main() -> ! {
     utilities::init_mem_allocator();
@@ -71,6 +73,7 @@ fn main() -> ! {
     let d5 = gpio_b.pb13.into_push_pull_output();
     let d6 = gpio_b.pb15.into_push_pull_output();
     let d7 = gpio_b.pb8.into_push_pull_output();
+    let mut lcd_backlight = gpio_b.pb9.into_push_pull_output();
 
     // Encoder pins
     let mut encoder_dt = gpio_b.pb1.into_pull_up_input();
@@ -98,10 +101,11 @@ fn main() -> ! {
 
     let mut current_state = TimeSaverState::Splash;
     let mut previous_state = TimeSaverState::Alarm; // this differs from current_state, in order to perform the first one-time action
-    let mut seconds_to_go = 0u32;
+    let mut minutes_to_go = 0u32;
 
     rprintln!("Everything is set up!");
     led_1.toggle();
+    lcd_backlight.set_high();
 
     loop {
         let now_ms = millis::now().unwrap();
@@ -112,21 +116,27 @@ fn main() -> ! {
         } else {
             false
         };
-        let button_long_click = button_short_click; // TODO: implement long clicks
+        // let button_long_click = button_short_click; // TODO: implement long clicks
 
         // Trigger state changes
         if button_short_click {
+            // Switch on LCD backlight if exiting from Alarm state
+            if current_state == TimeSaverState::Alarm {
+                lcd_backlight.set_high();
+            }
+
+            // Update state
             current_state = match current_state {
                 TimeSaverState::Splash => TimeSaverState::Setting,
                 TimeSaverState::Setting => TimeSaverState::Count,
                 TimeSaverState::Alarm => TimeSaverState::Splash,
                 _ => current_state, // keep same state otherwise (just the case of TimeSaverState::Count)
             }
-        } else if button_long_click {
-            current_state = match current_state {
-                TimeSaverState::Count => TimeSaverState::Setting,
-                _ => current_state, // keep same state otherwise
-            }
+            // } else if button_long_click {
+            //     current_state = match current_state {
+            //         TimeSaverState::Count => TimeSaverState::Setting,
+            //         _ => current_state, // keep same state otherwise
+            //     }
         }
         let state_changed = current_state != previous_state;
 
@@ -142,17 +152,24 @@ fn main() -> ! {
                 }
 
                 TimeSaverState::Setting => {
-                    seconds_to_go = 5; // TODO: define the default value
+                    encoder_interface::set(DEFAULT_MINUTES_TO_GO as i32 - 1);
+                    minutes_to_go = DEFAULT_MINUTES_TO_GO;
 
                     lcd.clear().unwrap();
                     lcd.print("Set time:").unwrap();
+                    lcd.set_cursor(1, 9).unwrap();
+                    lcd.print("min").unwrap();
                 }
 
                 TimeSaverState::Count => {
                     lcd.clear().unwrap();
                     lcd.print("Try to focus...").unwrap();
-                    lcd.set_cursor(1, 4).unwrap();
-                    lcd.print("min left").unwrap();
+                    lcd.set_cursor(1, 0).unwrap();
+                    lcd.print(&format!(
+                        "{: >3} min left", // right-aligned with 3 digits (including sign)
+                        minutes_to_go - 1
+                    ))
+                    .unwrap();
                 }
 
                 TimeSaverState::Alarm => {
@@ -169,23 +186,26 @@ fn main() -> ! {
             TimeSaverState::Setting => {
                 // Update encoder selection at 20Hz
                 if now_ms % 50 == 0 {
-                    let raw_value = encoder_interface::get();
-                    seconds_to_go = u32::try_from(raw_value).unwrap_or_default();
+                    // Get current encoder value, if it's positive, otherwise reset it
+                    minutes_to_go = u32::try_from(encoder_interface::get()).unwrap_or_else(|_| {
+                        encoder_interface::reset();
+                        0
+                    }) + 1; // avoid that the timer is set to 0
 
                     lcd.set_cursor(1, 5).unwrap();
                     lcd.print(&format!(
-                        "{: >3} min", // right-aligned with 3 digits (including sign)
-                        seconds_to_go
+                        "{: >3}", // right-aligned with 3 digits (including sign)
+                        minutes_to_go
                     ))
                     .unwrap();
                 }
             }
 
             TimeSaverState::Count => {
-                // Update remaining time at 1Hz
-                if now_ms % 1_000 == 0 {
-                    if let Some(sub_result) = seconds_to_go.checked_sub(1) {
-                        seconds_to_go = sub_result;
+                // Update remaining time each minute
+                if now_ms % 60_000 == 0 {
+                    if let Some(sub_result) = minutes_to_go.checked_sub(1) {
+                        minutes_to_go = sub_result;
                     } else {
                         // Move to alarm state
                         current_state = TimeSaverState::Alarm;
@@ -196,23 +216,19 @@ fn main() -> ! {
                     lcd.set_cursor(1, 0).unwrap();
                     lcd.print(&format!(
                         "{: >3} min", // right-aligned with 3 digits (including sign)
-                        seconds_to_go
+                        minutes_to_go
                     ))
                     .unwrap();
                 }
 
                 // Character animation (bottom-right of the screen) at 2Hz
                 if now_ms % 500 == 0 {
+                    led_2.toggle();
+                    lcd.set_cursor(1, 15).unwrap();
                     if led_2.is_set_high() {
-                        led_2.set_low();
-                        lcd.set_cursor(1, 15).unwrap();
                         lcd.write_custom_char(MAN_STANDING).unwrap();
-                        // lcd.write_custom_char(HEART_BORDER).unwrap();
                     } else {
-                        led_2.set_high();
-                        lcd.set_cursor(1, 15).unwrap();
                         lcd.write_custom_char(MAN_DANCING).unwrap();
-                        // lcd.write_custom_char(HEART_FULL).unwrap();
                     }
                 }
             }
@@ -220,7 +236,7 @@ fn main() -> ! {
             TimeSaverState::Alarm => {
                 // Blink LCD backlight at 2Hz
                 if now_ms % 500 == 0 {
-                    // TODO
+                    lcd_backlight.toggle();
                 }
             }
 

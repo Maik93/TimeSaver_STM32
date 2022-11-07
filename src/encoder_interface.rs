@@ -28,6 +28,16 @@ pub fn get() -> i32 {
     free(|cs| ENCODER_VALUE.borrow(cs).get())
 }
 
+/// Set encoder internal value to desired value.
+pub fn set(v: i32) {
+    free(|cs| ENCODER_VALUE.borrow(cs).replace(v));
+}
+
+/// Reset encoder value to 0.
+pub fn reset() {
+    set(0);
+}
+
 /// Interrupted pin, used for interrupt resets.
 pub enum InterruptedPin {
     DtPin,
